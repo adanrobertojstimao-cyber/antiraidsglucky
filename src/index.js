@@ -14,36 +14,47 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const prefix = "!";
 
-// Carregador automático da pasta commands
+// Carregador de Comandos
 const commandsPath = path.join(__dirname, 'commands');
-if (fs.existsSync(commandsPath)) {
-    const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
-    for (const file of commandFiles) {
-        const command = require(path.join(commandsPath, file));
-        client.commands.set(command.name, command);
-    }
+const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+const commandsJSON = [];
+
+for (const file of commandFiles) {
+    const command = require(path.join(commandsPath, file));
+    client.commands.set(command.name, command);
+    commandsJSON.push({
+        name: command.name,
+        description: command.description || "Comando do bot",
+        options: command.options || []
+    });
 }
 
-client.on('ready', () => console.log(`🚀 ${client.user.tag} ONLINE!`));
-
-client.on('messageCreate', async (message) => {
-    if (message.author.bot) return;
-
-    // Roda a lógica de anti-spam em cada mensagem
-    await checkSpam(message);
-
-    // Sistema de comandos por prefixo
-    if (!message.content.startsWith(prefix)) return;
-    const args = message.content.slice(prefix.length).trim().split(/ +/);
-    const commandName = args.shift().toLowerCase();
-    const command = client.commands.get(commandName);
-    if (command) command.execute(message, args);
+client.on('ready', async () => {
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+    try {
+        await rest.put(Routes.applicationCommands(client.user.id), { body: commandsJSON });
+        console.log(`✅ ${client.user.tag} Online e Comandos Registrados!`);
+    } catch (e) { console.error(e); }
 });
 
-client.on('channelCreate', async (channel) => {
-    await checkChannels(channel);
+// Listener de Interações (Slash)
+client.on('interactionCreate', async (interaction) => {
+    if (!interaction.isChatInputCommand()) return;
+    const command = client.commands.get(interaction.commandName);
+    if (!command) return;
+
+    try {
+        // Responde imediatamente para evitar o erro "aplicativo não respondeu"
+        await command.execute(interaction);
+    } catch (e) {
+        console.error(e);
+        if (!interaction.replied) await interaction.reply({ content: "Erro no comando!", ephemeral: true });
+    }
 });
+
+// Eventos de Monitoramento
+client.on('messageCreate', async (m) => { if(!m.author.bot) await checkSpam(m); });
+client.on('channelCreate', async (c) => await checkChannels(c));
 
 client.login(process.env.DISCORD_TOKEN);
