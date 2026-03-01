@@ -3,13 +3,12 @@ const {
     PermissionFlagsBits, 
     ActionRowBuilder, 
     ButtonBuilder, 
-    ButtonStyle,
-    RoleSelectMenuBuilder
+    ButtonStyle 
 } = require('discord.js');
 
 module.exports = {
     name: 'incorporar',
-    description: 'O bot envia uma mensagem personalizada e apaga o seu rastro.',
+    description: 'Envia mensagens via bot, incluindo a opção de DM direta.',
     options: [
         {
             name: 'modo',
@@ -19,7 +18,7 @@ module.exports = {
             choices: [
                 { name: 'Embed', value: 'embed' },
                 { name: 'Normal', value: 'normal' },
-                { name: 'Apenas para alguém', value: 'private' }
+                { name: 'Enviar por DM', value: 'dm' } // Mudamos aqui
             ]
         },
         {
@@ -30,7 +29,7 @@ module.exports = {
         },
         {
             name: 'quem',
-            description: 'Marque o usuário (obrigatório no modo Apenas para Alguém)',
+            description: 'Selecione o usuário (obrigatório para o modo DM)',
             type: 6,
             required: false
         },
@@ -39,83 +38,63 @@ module.exports = {
             description: 'Link para um botão (Ex: https://google.com)',
             type: 3,
             required: false
-        },
-        {
-            name: 'ativar-cargo',
-            description: 'Ativa menu de escolha de cargos',
-            type: 5,
-            required: false
         }
     ],
 
     async execute(interaction) {
-        // Verifica permissão de Administrador ou Gerenciar Mensagens
         if (!interaction.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
-            return interaction.reply({ content: "❌ Você não tem permissão para usar este comando.", ephemeral: true });
+            return interaction.reply({ content: "❌ Sem permissão.", ephemeral: true });
         }
 
         const modo = interaction.options.getString('modo');
-        const mensagem = interaction.options.getString('mensagem').replace(/\\n/g, '\n'); // Permite quebras de linha com \n
+        const mensagem = interaction.options.getString('mensagem').replace(/\\n/g, '\n');
         const alvo = interaction.options.getUser('quem');
         const link = interaction.options.getString('botao-link');
-        const ativarCargo = interaction.options.getBoolean('ativar-cargo');
 
-        // Responde de forma INVISÍVEL para o rastro do comando sumir
+        // Resposta invisível para o rastro do comando sumir do canal
         await interaction.deferReply({ ephemeral: true });
 
-        if (modo === 'private' && !alvo) {
-            return interaction.editReply("⚠️ Erro: No modo 'Apenas para alguém', você deve selecionar um usuário no campo 'quem'.");
+        // Validação da DM
+        if (modo === 'dm' && !alvo) {
+            return interaction.editReply("⚠️ Você precisa selecionar **quem** para enviar por DM.");
         }
 
         const components = [];
-        const row = new ActionRowBuilder();
-
-        // 🔗 Adiciona Botão de Link
         if (link && link.startsWith('http')) {
-            row.addComponents(
-                new ButtonBuilder()
-                    .setLabel('Link Externo')
-                    .setStyle(ButtonStyle.Link)
-                    .setURL(link)
-            );
-        }
-        if (row.components.length > 0) components.push(row);
-
-        // 🎭 Adiciona Menu de Cargo
-        if (ativarCargo) {
-            components.push(
-                new ActionRowBuilder().addComponents(
-                    new RoleSelectMenuBuilder()
-                        .setCustomId('menu-cargos')
-                        .setPlaceholder('Escolha um cargo abaixo...')
-                )
-            );
+            components.push(new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setLabel('Link Externo').setStyle(ButtonStyle.Link).setURL(link)
+            ));
         }
 
-        // 📤 Lógica de Envio (Sem rastro do autor)
         try {
-            const payload = { components };
+            // Lógica de Envio por DM
+            if (modo === 'dm') {
+                try {
+                    await alvo.send({ 
+                        content: `📩 **Nova mensagem de ${interaction.guild.name}:**\n\n${mensagem}`, 
+                        components 
+                    });
+                    return interaction.editReply(`✅ DM enviada com sucesso para **${alvo.tag}**!`);
+                } catch (err) {
+                    // Erro igual ao da imagem que você mandou (DM fechada)
+                    return interaction.editReply(`❌ **Erro:** Não consegui enviar DM para **${alvo.tag}**. Ele pode estar com as DMs fechadas ou não compartilha servidor comigo.`);
+                }
+            }
 
+            // Lógica de Envio no Canal (Normal ou Embed)
+            const payload = { components };
             if (modo === 'embed') {
-                const embed = new EmbedBuilder()
-                    .setColor('#2b2d31') // Cor escura padrão
-                    .setDescription(mensagem);
-                payload.embeds = [embed];
-            } else if (modo === 'private') {
-                payload.content = `🔔 ${alvo.toString()}, ${mensagem}`;
+                payload.embeds = [new EmbedBuilder().setColor('#2b2d31').setDescription(mensagem)];
             } else {
                 payload.content = mensagem;
             }
 
-            // Envia no canal como se fosse o bot escrevendo do zero
             await interaction.channel.send(payload);
-            
-            // Confirmação para o autor (que só ele vê)
-            await interaction.editReply("✅ Mensagem enviada com sucesso!");
+            await interaction.editReply("✅ Mensagem enviada no canal!");
 
         } catch (e) {
             console.error(e);
-            await interaction.editReply("❌ Ocorreu um erro ao tentar enviar a mensagem.");
+            await interaction.editReply("❌ Ocorreu um erro inesperado.");
         }
     }
 };
