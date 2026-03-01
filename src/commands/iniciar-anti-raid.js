@@ -2,28 +2,24 @@ const { PermissionFlagsBits, ChannelType } = require('discord.js');
 
 module.exports = {
     name: 'iniciar-anti-raid',
-    description: 'Configura o canal de logs e valida a proteção ativa.',
+    description: 'Ativa o sistema e cria logs.',
     async execute(interaction) {
-        // Suporte para Slash e Mensagem Comum
-        const isSlash = interaction.type === 2;
-        const guild = interaction.guild;
-        const member = interaction.member;
+        // Resposta imediata para o Discord não dar erro
+        await interaction.deferReply({ ephemeral: true });
 
-        if (!member.permissions.has(PermissionFlagsBits.Administrator)) {
-            const msg = "❌ Apenas administradores!";
-            return isSlash ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return interaction.editReply("❌ Você precisa ser Administrador.");
         }
 
-        let logChannel = guild.channels.cache.find(c => c.name === 'logs-antiraid');
+        let logChannel = interaction.guild.channels.cache.find(c => c.name === 'logs-antiraid');
         if (!logChannel) {
-            logChannel = await guild.channels.create({
+            logChannel = await interaction.guild.channels.create({
                 name: 'logs-antiraid',
                 type: ChannelType.GuildText,
-                permissionOverwrites: [{ id: guild.id, deny: [PermissionFlagsBits.ViewChannel] }]
+                permissionOverwrites: [{ id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] }]
             });
         }
 
-        const response = `🛡️ **Anti-Raid Ativo!**\n- Monitorando: Spam e Nukes\n- Canal de Logs: ${logChannel.toString()}`;
-        isSlash ? interaction.reply(response) : interaction.reply(response);
+        await interaction.editReply(`🛡️ **Anti-Raid Ativo!**\nLogs em: ${logChannel.toString()}\n- Spam: 8+ msgs / 3s\n- Canais: 10+ / 3s\n- Punição: 24h.`);
     }
 };
