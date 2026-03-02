@@ -22,11 +22,12 @@ client.commands = new Collection();
 const dataDir = path.join(process.cwd(), 'data');
 const configPath = path.join(dataDir, 'server_pv.json');
 const keysPath = path.join(dataDir, 'active_keys.json');
+const blindagemPath = path.join(dataDir, 'blindagem.json');
 
-// Garante que a pasta de dados existe no Volume
+// Garante que a pasta de dados existe no Volume do Railway
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
-// Carregador de Comandos
+// --- CARREGADOR DE COMANDOS ---
 const commandsPath = path.join(__dirname, 'commands');
 const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 const commandsJSON = [];
@@ -45,100 +46,121 @@ client.on('ready', async () => {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     try {
         await rest.put(Routes.applicationCommands(client.user.id), { body: commandsJSON });
-        console.log(`✅ ${client.user.tag} Online e Sincronizado!`);
+        console.log(`✅ ${client.user.tag} ONLINE | Anti-Raid & Blindagem Ativos`);
     } catch (e) { console.error(e); }
 });
 
+// --- LISTENER DE INTERAÇÕES (Slash, Botões e Modais) ---
 client.on('interactionCreate', async (interaction) => {
-    // 1. Slash Commands
+    // 1. Comandos Slash
     if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
         if (command) await command.execute(interaction);
     }
 
-    // 2. Botão: Abrir Tópico de Entrada
+    // 2. Botão: Abrir Tópico de Entrada (SGLUCKY)
     if (interaction.isButton() && interaction.customId === 'abrir_topico_entrada') {
         try {
             const thread = await interaction.channel.threads.create({
                 name: `confirmar-${interaction.user.username}`,
                 autoArchiveDuration: 60,
                 type: ChannelType.PrivateThread,
-                reason: 'Registro de entrada privada',
             });
 
             await thread.members.add(interaction.user.id);
-
-            // Gerar Chave SGLUCKY
             const chave = `SGLUCKY-${Math.floor(100000 + Math.random() * 900000)}`;
 
-            // Log da Chave no Canal Configurado
             if (fs.existsSync(configPath)) {
                 const config = JSON.parse(fs.readFileSync(configPath));
                 const logChan = interaction.guild.channels.cache.get(config.keyLogChannel);
-                if (logChan) {
-                    logChan.send(`🔑 **Nova Chave:** ${interaction.user.toString()} (ID: ${interaction.user.id})\nChave: \`${chave}\``);
-                }
+                if (logChan) logChan.send(`🔑 **Chave Gerada:** ${interaction.user.toString()}\nChave: \`${chave}\``);
             }
 
-            // Salvar Chave no Volume
             let keys = fs.existsSync(keysPath) ? JSON.parse(fs.readFileSync(keysPath)) : {};
             keys[interaction.user.id] = chave;
             fs.writeFileSync(keysPath, JSON.stringify(keys, null, 2));
 
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('inserir_chave_modal').setLabel('Inserir Chave de Confirmação').setStyle(ButtonStyle.Success)
+                new ButtonBuilder().setCustomId('inserir_chave_modal').setLabel('Inserir Chave').setStyle(ButtonStyle.Success)
             );
 
             await thread.send({ 
-                content: `👋 ${interaction.user.toString()}, bem-vindo ao processo de verificação.\nClique no botão abaixo para inserir a chave que você recebeu do dono.`,
+                content: `👋 ${interaction.user.toString()}, insira sua chave abaixo para liberar o acesso.`,
                 components: [row] 
             });
 
-            await interaction.reply({ content: `✅ Tópico de confirmação criado: ${thread.toString()}`, ephemeral: true });
-        } catch (e) { console.error(e); interaction.reply({ content: "❌ Erro ao criar tópico. Verifique minhas permissões.", ephemeral: true }); }
+            await interaction.reply({ content: `✅ Tópico criado: ${thread.toString()}`, ephemeral: true });
+        } catch (e) { console.error(e); }
     }
 
-    // 3. Botão: Chamar Modal
+    // 3. Botão: Abrir Modal
     if (interaction.isButton() && interaction.customId === 'inserir_chave_modal') {
         const modal = new ModalBuilder().setCustomId('modal_confirmacao').setTitle('Confirmação de Acesso');
         const input = new TextInputBuilder()
-            .setCustomId('input_chave')
-            .setLabel('Chave SGLUCKY')
-            .setPlaceholder('Ex: SGLUCKY-123456')
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true);
+            .setCustomId('input_chave').setLabel('Chave SGLUCKY').setStyle(TextInputStyle.Short).setRequired(true);
         modal.addComponents(new ActionRowBuilder().addComponents(input));
         await interaction.showModal(modal);
     }
 
-    // 4. Modal: Validar Chave e Dar Cargo
+    // 4. Modal: Validar Chave e Deletar Tópico
     if (interaction.isModalSubmit() && interaction.customId === 'modal_confirmacao') {
         const chaveInformada = interaction.fields.getTextInputValue('input_chave');
         const keys = fs.existsSync(keysPath) ? JSON.parse(fs.readFileSync(keysPath)) : {};
 
         if (keys[interaction.user.id] === chaveInformada) {
-            await interaction.reply({ content: "✅ **Chave Validada!** Seu acesso foi liberado. Este tópico será deletado em 5 segundos.", ephemeral: true });
+            await interaction.reply({ content: "✅ **Acesso Liberado!** O tópico será deletado em 5s.", ephemeral: true });
             
-            // Entrega o Cargo salvo no Setup
             if (fs.existsSync(configPath)) {
                 const config = JSON.parse(fs.readFileSync(configPath));
                 const role = interaction.guild.roles.cache.get(config.roleId);
-                if (role) await interaction.member.roles.add(role).catch(console.error);
+                if (role) await interaction.member.roles.add(role).catch(() => {});
             }
 
-            // Limpa a chave usada
             delete keys[interaction.user.id];
             fs.writeFileSync(keysPath, JSON.stringify(keys, null, 2));
-
-            // Deleta o tópico após 5s
             setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
         } else {
-            await interaction.reply({ content: "❌ **Chave Incorreta!** Verifique novamente com o administrador.", ephemeral: true });
+            await interaction.reply({ content: "❌ Chave incorreta!", ephemeral: true });
         }
     }
 });
 
-// Outros Eventos
+// --- SISTEMA DE BLINDAGEM (Anti-Delete) ---
+client.on('channelDelete', async (channel) => {
+    if (!fs.existsSync(blindagemPath)) return;
+    let blindados = JSON.parse(fs.readFileSync(blindagemPath));
+
+    if (blindados[channel.id]) {
+        const info = blindados[channel.id];
+        console.log(`🛡️ Canal blindado #${info.name} deletado. Recriando...`);
+
+        try {
+            const newChannel = await channel.guild.channels.create({
+                name: info.name,
+                type: channel.type,
+                parent: info.parentId,
+                topic: info.topic,
+                nsfw: info.nsfw,
+                permissionOverwrites: info.permissionOverwrites.map(ov => ({
+                    id: ov.id,
+                    type: ov.type,
+                    allow: BigInt(ov.allow),
+                    deny: BigInt(ov.deny)
+                }))
+            });
+
+            // Atualiza o banco de dados com o novo ID do canal
+            delete blindados[channel.id];
+            blindados[newChannel.id] = info;
+            fs.writeFileSync(blindagemPath, JSON.stringify(blindados, null, 2));
+
+            const logChan = channel.guild.channels.cache.find(c => c.name === 'logs-antiraid');
+            if (logChan) logChan.send(`🛡️ **BLINDAGEM:** Canal \`#${info.name}\` recriado com sucesso.`);
+        } catch (e) { console.error("Erro na blindagem:", e); }
+    }
+});
+
+// --- OUTROS EVENTOS (Anti-Raid) ---
 client.on('messageCreate', async (m) => { if(!m.author.bot) await checkSpam(m); });
 client.on('channelCreate', async (c) => await checkChannels(c));
 
