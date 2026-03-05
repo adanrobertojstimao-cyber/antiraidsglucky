@@ -43,25 +43,43 @@ if (!fs.existsSync(dataDir)) {
     console.log('[SISTEMA] Volume de dados /app/data inicializado.');
 }
 
-// 2. CONFIGURAÇÃO DA API DO GOOGLE (LENDO DA VARIÁVEL GOOGLE_CREDENTIALS)
+// 2. CONFIGURAÇÃO DA API DO GOOGLE
 let sheets;
 try {
-    const creds = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const rawCreds = process.env.GOOGLE_CREDENTIALS;
+    if (!rawCreds) throw new Error("Variável GOOGLE_CREDENTIALS não encontrada.");
+
+    const creds = JSON.parse(rawCreds);
+    
+    // TRATAMENTO DE CHOQUE PARA A CHAVE PRIVADA
+    let pKey = creds.private_key;
+    
+    // 1. Corrige quebras de linha
+    pKey = pKey.replace(/\\n/g, '\n');
+    // 2. Remove aspas extras se houver
+    pKey = pKey.replace(/^"|"$/g, '');
+    // 3. Garante o formato correto da assinatura
+    if (!pKey.includes("-----BEGIN PRIVATE KEY-----")) {
+        pKey = `-----BEGIN PRIVATE KEY-----\n${pKey}\n-----END PRIVATE KEY-----`;
+    }
+
     const auth = new google.auth.GoogleAuth({
         credentials: {
-            client_email: creds.client_email,
-            private_key: creds.private_key.includes('\\n') 
-    ? creds.private_key.replace(/\\n/g, '\n') 
-    : creds.private_key,
-
+            client_email: creds.client_email.replace('%40', '@'), // Vacina contra o %40
+            private_key: pKey,
         },
-        scopes: ['https://www.googleapis.com'],
+        scopes: [
+            'https://www.googleapis.com',
+            'https://www.googleapis.com'
+        ],
     });
+
     sheets = google.sheets({ version: 'v4', auth });
     console.log('✅ GOOGLE API: Autenticado com sucesso.');
 } catch (error) {
-    console.error('❌ GOOGLE API: Erro na autenticação. Verifique a variável GOOGLE_CREDENTIALS.');
+    console.error('❌ GOOGLE API: Erro Crítico:', error.message);
 }
+
 
 // CONFIGURAÇÃO DA PLANILHA - INSIRA SEU ID ABAIXO
 const SPREADSHEET_ID = '1FgXAilyusU-8-y1TNu5sEPgLtRyBHLvVt7QK0Od6r8E'; 
