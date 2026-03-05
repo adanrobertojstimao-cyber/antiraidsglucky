@@ -164,7 +164,7 @@ async function checkNewResponses() {
                 lastRowProcessed++;
             }
         }
-    } catch (err) { console.error("[MONITOR]: Erro ao ler planilha:", err.message); }
+    } catch (err) { console.error("[DETALHE GOOGLE]:", err.response ? err.response.status : err.message);  }
 }
 
 /**
