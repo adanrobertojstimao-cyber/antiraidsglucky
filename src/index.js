@@ -1,3 +1,9 @@
+/**
+ * -----------------------------------------------------------------------
+ * SGLUCKY - SISTEMA INTEGRADO DE SEGURANÇA E GERENCIAMENTO (STUMBLE GUYS)
+ * -----------------------------------------------------------------------
+ */
+
 const { 
     Client, GatewayIntentBits, Collection, REST, Routes, ActionRowBuilder, 
     ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, 
@@ -9,8 +15,10 @@ const { checkSpam, checkChannels } = require('./antiRaid');
 
 const client = new Client({ 
     intents: [
-        GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, 
-        GatewayIntentBits.MessageContent, GatewayIntentBits.GuildModeration,
+        GatewayIntentBits.Guilds, 
+        GatewayIntentBits.GuildMessages, 
+        GatewayIntentBits.MessageContent, 
+        GatewayIntentBits.GuildModeration,
         GatewayIntentBits.GuildMembers
     ] 
 });
@@ -18,32 +26,46 @@ const client = new Client({
 client.commands = new Collection();
 const dataDir = path.join(process.cwd(), 'data');
 const ticketConfigPath = path.join(dataDir, 'ticket_config.json');
+const blindagemPath = path.join(dataDir, 'blindagem.json');
 
-// Carregador de Comandos
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+
+// --- CARREGADOR DE COMANDOS (COMMAND HANDLER) ---
 const commandsPath = path.join(__dirname, 'commands');
 const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 const commandsJSON = [];
+
+console.log('--- [INICIANDO CARREGAMENTO] ---');
 for (const file of commandFiles) {
     const command = require(path.join(commandsPath, file));
-    client.commands.set(command.name, command);
-    commandsJSON.push({ name: command.name, description: command.description, options: command.options || [] });
+    if (command.name) {
+        client.commands.set(command.name, command);
+        commandsJSON.push({ name: command.name, description: command.description, options: command.options || [] });
+        console.log(`✅ COMANDO: /${command.name}`);
+    }
 }
+console.log('--- [CARREGAMENTO CONCLUÍDO] ---\n');
 
 client.on('ready', async () => {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     try {
         await rest.put(Routes.applicationCommands(client.user.id), { body: commandsJSON });
-        console.log(`✅ ${client.user.tag} Online | Sistema de Tickets e Logs pronto.`);
+        console.log(`🚀 ${client.user.tag} ONLINE | STUMBLE LUCKY ATIVADO`);
     } catch (e) { console.error(e); }
 });
 
+// --- LÓGICA DE INTERAÇÕES (TICKETS, MODAIS E LOGS) ---
 client.on('interactionCreate', async (int) => {
+    
+    // 1. Slash Commands
     if (int.isChatInputCommand()) {
         const cmd = client.commands.get(int.commandName);
-        if (cmd) await cmd.execute(int);
+        if (cmd) {
+            try { await cmd.execute(int); } catch (e) { console.error(e); }
+        }
     }
 
-    // 1. Abertura de Tópico Privado
+    // 2. Abertura do Tópico Privado
     if (int.isButton() && int.customId.startsWith('tk_')) {
         await int.deferReply({ ephemeral: true });
         const tipo = int.customId.split('_')[1];
@@ -56,70 +78,99 @@ client.on('interactionCreate', async (int) => {
             const thread = await targetChan.threads.create({
                 name: `🎫-${tipo}-${int.user.username}`,
                 type: ChannelType.PrivateThread,
+                autoArchiveDuration: 60
             });
             await thread.members.add(int.user.id);
 
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`form_${tipo}`).setLabel('Preencher Ficha').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId(`abrir_modal_${tipo}`).setLabel('Preencher Ficha').setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId('fechar_tk').setLabel('Fechar Ticket').setStyle(ButtonStyle.Danger)
             );
 
-            await thread.send({ content: `${int.user.toString()} | Staff 🤩\nClique abaixo para enviar sua ficha.`, components: [row] });
+            await thread.send({ content: `${int.user.toString()} | Staff 🤩\nPreencha a ficha abaixo.`, components: [row] });
             await int.editReply(`✅ Tópico aberto: ${thread.toString()}`);
-        } catch (e) { await int.editReply("❌ Erro ao criar tópico."); }
+        } catch (e) { await int.editReply("❌ Erro ao criar tópico. Verifique as permissões."); }
     }
 
-    // 2. Modal (Custo Opcional para Torneio)
-    if (int.isButton() && int.customId.startsWith('form_')) {
-        const tipo = int.customId.split('_')[1];
-        const modal = new ModalBuilder().setCustomId(`modal_${tipo}`).setTitle(`FICHA DE ${tipo.toUpperCase()}`);
+    // 3. Chamada do Modal (Torneio)
+    if (int.isButton() && int.customId === 'abrir_modal_torneio') {
+        const modal = new ModalBuilder().setCustomId('modal_torneio_submit').setTitle('REGISTRO DE TORNEIO');
 
-        if (tipo === 'torneio') {
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('t_nick').setLabel('Nickname').setStyle(TextInputStyle.Short).setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('t_nome').setLabel('Nome do Torneio').setStyle(TextInputStyle.Short).setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('t_cfg').setLabel('Modo | Limite Players').setStyle(TextInputStyle.Short).setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('t_mapas').setLabel('Emotes e Mapas').setStyle(TextInputStyle.Paragraph).setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('t_custo').setLabel('Custo (Deixe vazio se for Grátis)').setStyle(TextInputStyle.Short).setRequired(false))
-            );
-        } else {
-            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('relato').setLabel('Relato/Denúncia').setStyle(TextInputStyle.Paragraph).setRequired(true)));
-        }
+        modal.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('t_id').setLabel('Nickname ou ID no Jogo').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('t_info').setLabel('Nome e Descrição do Torneio').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('t_cfg').setLabel('Emotes | Quantas Rodadas').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('t_datas').setLabel('Início Inscrição | Início Torneio').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('t_premio').setLabel('Qual o Prêmio?').setStyle(TextInputStyle.Short).setRequired(true))
+        );
+
         await int.showModal(modal);
     }
 
-    // 3. Receber Modal e Mandar Log com Botões
-    if (int.isModalSubmit()) {
-        const tipo = int.customId.split('_')[1];
-        const dados = int.fields.fields.map(f => `🔹 **${f.customId.toUpperCase()}:** ${f.value || 'Nenhum'}`).join('\n');
-        await int.reply({ content: `✅ **Ficha enviada!** Aguarde análise.\n\n${dados}` });
+    // 4. Recebimento do Modal + Log com Aprovação + Auto-Delete
+    if (int.isModalSubmit() && int.customId === 'modal_torneio_submit') {
+        const dados = int.fields.fields.map(f => `🔹 **${f.customId.replace('t_', '').toUpperCase()}:** ${f.value}`).join('\n');
+        
+        await int.reply({ content: "✅ **Ficha Enviada!** O tópico será deletado em 3 segundos.", ephemeral: true });
 
+        // Enviar Log para Aprovação da Staff
         const config = JSON.parse(fs.readFileSync(ticketConfigPath));
-        const logChanId = config[`logs_${tipo}`];
-        const logChan = int.guild.channels.cache.get(logChanId);
+        const logChan = int.guild.channels.cache.get(config.logs_torneio);
 
         if (logChan) {
-            const embed = new EmbedBuilder().setTitle(`📋 Nova Solicitação: ${tipo.toUpperCase()}`).setDescription(`De: ${int.user.tag}\nCanal: ${int.channel.toString()}\n\n${dados}`).setColor('Gold');
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('aprov').setLabel('Aprovar').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('reprov').setLabel('Reprovar').setStyle(ButtonStyle.Danger)
+            const logEmbed = new EmbedBuilder().setTitle(`🏆 Novo Torneio: ${int.user.tag}`).setDescription(`${dados}`).setColor('Gold').setTimestamp();
+            const logRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`aprov_${int.user.id}`).setLabel('Aprovar').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId(`reprov_${int.user.id}`).setLabel('Reprovar').setStyle(ButtonStyle.Danger)
             );
-            await logChan.send({ embeds: [embed], components: [row] });
+            await logChan.send({ embeds: [logEmbed], components: [logRow] });
         }
+
+        // DELETA O TÓPICO AUTOMATICAMENTE APÓS O MODAL
+        setTimeout(() => int.channel.delete().catch(() => {}), 3000);
     }
 
-    // 4. Botões de Aprovação no Canal de Logs
-    if (int.isButton() && (int.customId === 'aprov' || int.customId === 'reprov')) {
-        const status = int.customId === 'aprov' ? '✅ APROVADO' : '❌ REPROVADO';
+    // 5. Botões de Log (Staff)
+    if (int.isButton() && (int.customId.startsWith('aprov_') || int.customId.startsWith('reprov_'))) {
+        const status = int.customId.startsWith('aprov') ? '✅ APROVADO' : '❌ REPROVADO';
         await int.update({ content: `**STATUS:** ${status} por ${int.user.tag}`, components: [] });
     }
 
+    // 6. Fechar Ticket Manual
     if (int.isButton() && int.customId === 'fechar_tk') {
-        await int.reply("🔒 Fechando...");
+        await int.reply("🔒 Fechando em 5s...");
         setTimeout(() => int.channel.delete().catch(() => {}), 5000);
+    }
+});
+
+// --- SISTEMA DE BLINDAGEM ---
+client.on('channelDelete', async (c) => {
+    if (!fs.existsSync(blindagemPath)) return;
+    let b = JSON.parse(fs.readFileSync(blindagemPath));
+    if (b[c.id]) {
+        const info = b[c.id];
+        try {
+            const nc = await c.guild.channels.create({
+                name: info.name, type: c.type, parent: info.parentId,
+                permissionOverwrites: info.permissionOverwrites.map(ov => ({ id: ov.id, type: ov.type, allow: BigInt(ov.allow), deny: BigInt(ov.deny) }))
+            });
+            delete b[c.id]; b[nc.id] = info;
+            fs.writeFileSync(blindagemPath, JSON.stringify(b, null, 2));
+        } catch (e) { console.error(e); }
+    }
+});
+
+// --- AUTO-BOOST ---
+client.on('guildMemberUpdate', async (o, n) => {
+    const rId = "1477759708814381271"; const cId = "1477506690525040791";
+    if (!o.premiumSince && n.premiumSince) {
+        await n.roles.add(rId);
+        const chan = n.guild.channels.cache.get(cId);
+        if (chan) chan.send(`🚀 **IMPULSO!** ${n.user.toString()} recebeu <@&${rId}>!`);
     }
 });
 
 client.on('messageCreate', async (m) => { if(!m.author.bot) await checkSpam(m); });
 client.on('channelCreate', async (c) => await checkChannels(c));
+
 client.login(process.env.DISCORD_TOKEN);
