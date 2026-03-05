@@ -110,7 +110,7 @@ client.on('ready', async () => {
     try {
         await rest.put(Routes.applicationCommands(client.user.id), { body: commandsJSON });
         console.log(`🚀 BOT ONLINE: ${client.user.tag}`);
-    } catch (e) { console.error('[ERRO REST]:', e); }
+    } catch (e) { console.error('[LOG_REAL]:', e); }
 
     // Verifica a planilha do Google Forms a cada 60 segundos
     setInterval(checkNewResponses, 60000);
