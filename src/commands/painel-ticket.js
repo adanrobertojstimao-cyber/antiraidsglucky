@@ -1,147 +1,96 @@
-const { 
-    EmbedBuilder, 
-    ActionRowBuilder, 
-    ButtonBuilder, 
-    ButtonStyle, 
-    PermissionFlagsBits,
-    ApplicationCommandOptionType 
-} = require('discord.js');
-const fs = require('fs');
-const path = require('path');
+client.on('interactionCreate', async (interaction) => {
+    // 1. Slash Commands
+    if (interaction.isChatInputCommand()) {
+        const command = client.commands.get(interaction.commandName);
+        if (command) await command.execute(interaction);
+    }
 
-/**
- * COMANDO: /painel-ticket
- * Finalidade: Envia painéis de atendimento personalizados para Ajuda ou Torneios.
- * Configura o canal de destino dos tickets no volume persistente do Railway.
- */
-module.exports = {
-    name: 'painel-ticket',
-    description: 'Envia um painel de atendimento (Ajuda ou Torneios) para o servidor.',
-    options: [
-        {
-            name: 'modo',
-            description: 'Selecione qual categoria de painel você deseja enviar.',
-            type: 3, // STRING
-            required: true,
-            choices: [
-                { name: '🛠️ Ajuda/Denúncia', value: 'ajuda' },
-                { name: '🏆 Torneios', value: 'torneio' }
-            ]
-        },
-        {
-            name: 'canal-atendimento',
-            description: 'Canal onde os Tópicos Privados serão criados para este modo.',
-            type: 7, // CHANNEL
-            required: true
-        }
-    ],
+    // 2. BOTÃO DO PAINEL (Criação do Tópico)
+    if (interaction.isButton() && interaction.customId.startsWith('tk_')) {
+        // Resposta imediata para evitar "Interação Falhou"
+        await interaction.deferReply({ ephemeral: true });
 
-    /**
-     * EXECUÇÃO DO COMANDO
-     * Verifica permissões, salva configurações e envia o componente visual.
-     */
-    async execute(interaction) {
-        // 1. Verificação de Segurança (Apenas Administradores)
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({ 
-                content: "❌ **Erro de Permissão:** Apenas administradores do servidor podem configurar painéis de ticket.", 
-                ephemeral: true 
-            });
-        }
+        const tipo = interaction.customId.split('_')[1];
+        const cfgPath = path.join(process.cwd(), 'data', 'ticket_config.json');
 
-        const modo = interaction.options.getString('modo');
-        const canalAlvo = interaction.options.getChannel('canal-atendimento');
-        
-        // 2. Caminho do Banco de Dados (Volume Railway /app/data)
-        const dataDir = path.join(process.cwd(), 'data');
-        const configPath = path.join(dataDir, 'ticket_config.json');
+        if (!fs.existsSync(cfgPath)) return interaction.editReply("❌ Erro: Sistema não configurado.");
 
-        // Garante que a pasta de dados existe para evitar erros de leitura/escrita
-        if (!fs.existsSync(dataDir)) {
-            fs.mkdirSync(dataDir, { recursive: true });
-        }
+        const config = JSON.parse(fs.readFileSync(cfgPath));
+        const targetChannel = interaction.guild.channels.cache.get(config[tipo]);
+
+        if (!targetChannel) return interaction.editReply("❌ Canal de atendimento não encontrado.");
 
         try {
-            // 3. Atualização do Arquivo de Configuração
-            // Lê o arquivo existente para não apagar configurações de outros modos
-            let config = {};
-            if (fs.existsSync(configPath)) {
-                try {
-                    config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-                } catch (parseError) {
-                    console.error("Erro ao ler JSON de tickets:", parseError);
-                    config = {};
-                }
-            }
+            // Cria o Tópico Privado
+            const thread = await targetChannel.threads.create({
+                name: `🎫-${tipo}-${interaction.user.username}`,
+                autoArchiveDuration: 60,
+                type: ChannelType.PrivateThread,
+            });
 
-            // Define o ID do canal para o modo escolhido
-            config[modo] = canalAlvo.id;
-            fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+            await thread.members.add(interaction.user.id);
 
-            // 4. Construção Visual do Painel (Embed e Botão)
-            const embed = new EmbedBuilder().setTimestamp();
-            const row = new ActionRowBuilder();
+            // Mensagem INTERNA do tópico com o BOTÃO DO MODAL
+            const embed = new EmbedBuilder()
+                .setTitle(`Atendimento: ${tipo.toUpperCase()}`)
+                .setDescription(`Olá ${interaction.user.toString()}, para prosseguir, clique no botão abaixo e preencha a ficha.`)
+                .setColor('#2b2d31');
 
-            if (modo === 'ajuda') {
-                // Configuração visual para o Painel de Ajuda/Denúncia
-                embed.setTitle('🎫 Central de Atendimento: Ajuda & Denúncia')
-                    .setDescription(
-                        'Precisa de suporte ou quer reportar uma infração?\n\n' +
-                        '**Categorias disponíveis:**\n' +
-                        '• 🛑 **BAN:** Reportar hackers ou griefing.\n' +
-                        '• 🔇 **MUTE:** Ofensas, toxicidade ou ameaças.\n' +
-                        '• 🌈 **NICK [W]:** Solicitação de nomes coloridos.\n' +
-                        '• ❓ **DÚVIDAS:** Suporte geral do servidor.\n\n' +
-                        '*Clique no botão abaixo para abrir um tópico privado.*'
-                    )
-                    .setColor('#5865F2') // Cor Blurple do Discord
-                    .setFooter({ text: 'Atendimento exclusivo SGLUCKY', iconURL: interaction.guild.iconURL() });
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`abrir_modal_${tipo}`) // ID para abrir o modal
+                    .setLabel('Preencher Ficha')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId('fechar_tk')
+                    .setLabel('Fechar Ticket')
+                    .setStyle(ButtonStyle.Danger)
+            );
 
-                row.addComponents(
-                    new ButtonBuilder()
-                        .setCustomId('tk_ajuda')
-                        .setLabel('Abrir Ticket de Ajuda')
-                        .setStyle(ButtonStyle.Secondary)
-                        .setEmoji('🛠️')
-                );
-            } else {
-                // Configuração visual para o Painel de Torneios
-                embed.setTitle('🏆 Registro de Novos Torneios')
-                    .setDescription(
-                        'Deseja organizar um torneio oficial no servidor?\n\n' +
-                        '**Lembrete de Horários:**\n' +
-                        '• Inscrições: 13:00, 14:50, 16:40, 18:30, 20:20, 22:10\n' +
-                        '• Início: Máximo de 40 min após a inscrição.\n\n' +
-                        '*Tenha em mãos: Modo, Limite de Players, Emotes e Mapas.*'
-                    )
-                    .setColor('#FEE75C') // Cor Amarelo/Ouro
-                    .setFooter({ text: 'Sistema de Torneios SGLUCKY', iconURL: interaction.guild.iconURL() });
-
-                row.addComponents(
-                    new ButtonBuilder()
-                        .setCustomId('tk_torneio')
-                        .setLabel('Registrar Torneio')
-                        .setStyle(ButtonStyle.Primary)
-                        .setEmoji('🏆')
-                );
-            }
-
-            // 5. Envio Final
-            await interaction.channel.send({ embeds: [embed], components: [row] });
+            await thread.send({ content: `${interaction.user.toString()} | Staff 🤩`, embeds: [embed], components: [row] });
             
-            await interaction.reply({ 
-                content: `✅ **Painel de ${modo.toUpperCase()} configurado!**\nOs tickets abertos por este painel serão direcionados para o canal: ${canalAlvo.toString()}`, 
-                ephemeral: true 
-            });
-
-            console.log(`[LOG] Painel de ${modo} enviado por ${interaction.user.tag} em #${interaction.channel.name}`);
-
-        } catch (error) {
-            console.error('Erro ao processar /painel-ticket:', error);
-            await interaction.reply({ 
-                content: "❌ **Erro Crítico:** Ocorreu um problema ao salvar as configurações ou enviar o painel. Verifique os logs do Railway.", 
-                ephemeral: true 
-            });
+            await interaction.editReply(`✅ Seu ticket foi aberto: ${thread.toString()}`);
+        } catch (e) {
+            console.error(e);
+            await interaction.editReply("❌ Erro ao criar tópico. Verifique as permissões do bot.");
         }
     }
-};
+
+    // 3. BOTÃO DENTRO DO TÓPICO (Abre o Modal)
+    if (interaction.isButton() && interaction.customId.startsWith('abrir_modal_')) {
+        const tipo = interaction.customId.split('_')[2];
+        const modal = new ModalBuilder().setCustomId(`modal_${tipo}`).setTitle(`Ficha de ${tipo}`);
+
+        if (tipo === 'ajuda') {
+            // ... (Seus campos de BAN, MUTE, NICK conforme conversamos)
+            const input = new TextInputBuilder()
+                .setCustomId('assunto').setLabel('Assunto').setStyle(TextInputStyle.Short).setRequired(true);
+            modal.addComponents(new ActionRowBuilder().addComponents(input));
+        } else if (tipo === 'torneio') {
+            // Campos de Torneio (Nickname, Nome, Modo, Limite, Horários)
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('t_nick').setLabel('Nickname').setStyle(TextInputStyle.Short).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('t_nome').setLabel('Nome do Torneio').setStyle(TextInputStyle.Short).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('t_config').setLabel('Modo/Limite Players').setStyle(TextInputStyle.Short).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('t_emotes').setLabel('Emotes/Mapas').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('t_horas').setLabel('Inscrição/Início').setStyle(TextInputStyle.Short).setRequired(true))
+            );
+        }
+
+        await interaction.showModal(modal);
+    }
+
+    // 4. RECEBIMENTO DO MODAL (Envia as respostas no tópico)
+    if (interaction.isModalSubmit()) {
+        const dados = interaction.fields.fields.map(f => `🔹 **${f.customId.toUpperCase()}:** ${f.value}`).join('\n');
+        await interaction.reply({ 
+            content: `✅ **Dados Enviados para a Staff:**\n\n${dados}` 
+        });
+    }
+
+    // 5. FECHAR TICKET
+    if (interaction.isButton() && interaction.customId === 'fechar_tk') {
+        await interaction.reply("🔒 Fechando em 5s...");
+        setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
+    }
+});
