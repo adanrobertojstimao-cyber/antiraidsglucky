@@ -110,11 +110,10 @@ client.on('ready', async () => {
     try {
         await rest.put(Routes.applicationCommands(client.user.id), { body: commandsJSON });
         console.log(`🚀 BOT ONLINE: ${client.user.tag}`);
-    } catch (e) { console.error('[ERRO REST]:', e); }
-
-    // Verifica a planilha do Google Forms a cada 60 segundos
-    setInterval(checkNewResponses, 60000);
-});
+   } catch (err) { 
+    // Isso vai dizer se o erro é 401 (Chave) ou 403 (Permissão na Planilha)
+    console.error("[LOG_REAL]:", err.response ? err.response.status + " - " + JSON.stringify(err.response.data) : err.message); 
+}
 
 /**
  * 5. FUNÇÃO: MONITOR DE PLANILHA (GOOGLE SHEETS)
