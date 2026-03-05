@@ -61,7 +61,7 @@ try {
 }
 
 // CONFIGURAÇÃO DA PLANILHA - INSIRA SEU ID ABAIXO
-const SPREADSHEET_ID = '712586733'; 
+const SPREADSHEET_ID = '1FgXAilyusU-8-y1TNu5sEPgLtRyBHLvVt7QK0Od6r8E'; 
 let lastRowProcessed = 1; // Começa a ler após o cabeçalho
 
 // 3. CARREGADOR DE COMANDOS (COMMAND HANDLER)
