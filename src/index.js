@@ -50,7 +50,10 @@ try {
     const auth = new google.auth.GoogleAuth({
         credentials: {
             client_email: creds.client_email,
-            private_key: creds.private_key.replace(/\\n/g, '\n'),
+            private_key: creds.private_key.includes('\\n') 
+    ? creds.private_key.replace(/\\n/g, '\n') 
+    : creds.private_key,
+
         },
         scopes: ['https://www.googleapis.com'],
     });
