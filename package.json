@@ -1,22 +1,23 @@
 {
-  "name": "bot-principal-antiraid",
-  "version": "1.1.0",
-  "description": "Bot de segurança com anti-spam, anti-nuke e comandos de incorporação",
+  "name": "bot-stumble-lucky-google",
+  "version": "3.0.0",
+  "description": "Bot com integração de Google Sheets API para Torneios e Ajuda",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
-    "discord",
-    "bot",
-    "antiraid",
-    "javascript"
+    "discordjs",
+    "google-sheets",
+    "automation",
+    "stumble-guys"
   ],
-  "author": "",
+  "author": "SGLUCKY",
   "license": "ISC",
   "dependencies": {
-    "discord.js": "^14.14.1"
+    "discord.js": "^14.14.1",
+    "googleapis": "^126.0.0"
   },
   "engines": {
     "node": ">=18.0.0"
