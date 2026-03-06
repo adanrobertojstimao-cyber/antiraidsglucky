@@ -16,6 +16,7 @@ const { google } = require('googleapis');
 const fs = require('fs');
 const path = require('path');
 const { checkSpam, checkChannels } = require('./antiRaid');
+const { gerenciarEventos } = require('./evento-system');
 
 // 1. INICIALIZAÇÃO DO CLIENTE COM TODAS AS INTENTS
 const client = new Client({ 
@@ -215,7 +216,14 @@ client.on('interactionCreate', async (interaction) => {
         await interaction.update({ content: `📌 **STAFF:** ${status} por ${interaction.user.tag}`, embeds: [oldEmbed], components: [] });
     }
 });
+//6,5 SISTEMA DE EVENTOS
+client.on('interactionCreate', async (interaction) => {
+    
+    // Adicione esta linha:
+    await gerenciarEventos(interaction);
 
+    // ... o resto do seu código (Tickets, Blindagem, etc)
+});
 /**
  * 7. SISTEMA DE BLINDAGEM (ANTI-DELETE)
  */
