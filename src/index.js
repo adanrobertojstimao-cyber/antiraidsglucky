@@ -69,8 +69,8 @@ try {
             private_key: pKey,
         },
         scopes: [
-            'https://www.googleapis.com',
-            'https://www.googleapis.com'
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/drive.readonly'
         ],
     });
 
