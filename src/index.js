@@ -164,8 +164,18 @@ async function checkNewResponses() {
                 lastRowProcessed++;
             }
         }
-    } catch (err) { console.error("[DETALHE GOOGLE]:", err.response ? err.response.status : err.message);  }
+        } catch (err) { 
+        // ESTA É A "VACINA" PARA DESCOBRIR O ERRO REAL:
+        if (err.response && err.response.data && err.response.data.error) {
+            const gError = err.response.data.error;
+            console.error(`[ERRO GOOGLE ${gError.code}]: ${gError.message}`);
+            console.error(`[STATUS]: ${gError.status}`);
+        } else {
+            console.error("[ERRO MONITOR]:", err.message);
+        }
+    }
 }
+
 
 /**
  * 6. EVENTO: INTERACTION CREATE
