@@ -1,7 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, SlashCommandBuilder } = require('discord.js');
 
 module.exports = {
-    name: 'evento', // ADICIONE ESTA LINHA PARA O SEU INDEX.JS LER
+    name: 'evento', 
     description: 'Envia o painel de criação de eventos!',
     data: new SlashCommandBuilder()
         .setName('evento')
@@ -9,8 +9,6 @@ module.exports = {
 
     async execute(interaction) {
         const CANAL_PAINEL = '1479512064023068896';
-        // ... resto do seu código que já está no arquivo
-
 
         if (interaction.channelId !== CANAL_PAINEL) {
             return interaction.reply({ content: `Este comando só pode ser usado no canal <#${CANAL_PAINEL}>`, ephemeral: true });
@@ -31,18 +29,15 @@ module.exports = {
         await interaction.reply({ embeds: [embed], components: [row] });
     },
 
-    // --- COLOQUE ESTA PARTE NO SEU EVENTO DE INTERAÇÃO (interactionCreate) ---
-    // Se o seu index.js gerencia as interações de botões e modais, 
-    // você deve garantir que ele consiga ler os IDs abaixo:
-
     async handleInteraction(interaction) {
         const CANAL_APROVACAO = '1479517012001816764';
         const CANAL_EVENTOS_FINAL = '1477642269099032738';
+        const GUILD_STAFF_ID = '14775033352872305'; // ID do Servidor de Staff
+        const CANAL_LOG_VENCEDORES = '1479538910139912305'; // ID do Canal de Log (na Staff)
 
-        // 1. Abrir o Modal de Criação
+        // 1. Abrir Modal
         if (interaction.isButton() && interaction.customId === 'abrir_modal_evento') {
             const modal = new ModalBuilder().setCustomId('modal_criacao').setTitle('Dados do Evento');
-            
             modal.addComponents(
                 new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('mapas_class').setLabel('Mapas Classificatória').setStyle(TextInputStyle.Paragraph)),
                 new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('mapas_elim').setLabel('Mapas Eliminatórias').setStyle(TextInputStyle.Paragraph)),
@@ -53,17 +48,15 @@ module.exports = {
             return await interaction.showModal(modal);
         }
 
-        // 2. Processar o envio do Modal de Criação
+        // 2. Enviar para Aprovação (Servidor Staff)
         if (interaction.isModalSubmit() && interaction.customId === 'modal_criacao') {
             const embed = new EmbedBuilder()
-                .setTitle('📢 Pedido de Evento')
+                .setTitle('📢 Novo Pedido de Evento')
                 .setColor('Yellow')
                 .addFields(
                     { name: 'Criador', value: `<@${interaction.user.id}>` },
                     { name: 'Modos', value: interaction.fields.getTextInputValue('modos') },
-                    { name: 'Horário', value: interaction.fields.getTextInputValue('horario') },
-                    { name: 'Classificatórias', value: interaction.fields.getTextInputValue('mapas_class') },
-                    { name: 'Eliminatórias', value: interaction.fields.getTextInputValue('mapas_elim') }
+                    { name: 'Horário', value: interaction.fields.getTextInputValue('horario') }
                 );
 
             const botoes = new ActionRowBuilder().addComponents(
@@ -71,49 +64,69 @@ module.exports = {
                 new ButtonBuilder().setCustomId(`rejeitar_${interaction.user.id}`).setLabel('Rejeitar').setStyle(ButtonStyle.Danger)
             );
 
-            const canalAprov = interaction.client.channels.cache.get(CANAL_APROVACAO);
-            await canalAprov.send({ embeds: [embed], components: [botoes] });
-            await interaction.reply({ content: 'Enviado para aprovação!', ephemeral: true });
+            const guildStaff = interaction.client.guilds.cache.get(GUILD_STAFF_ID);
+            const canalAprov = guildStaff?.channels.cache.get(CANAL_APROVACAO);
+            
+            if (canalAprov) await canalAprov.send({ embeds: [embed], components: [botoes] });
+            await interaction.reply({ content: '✅ Enviado para a Staff!', ephemeral: true });
         }
 
-        // 3. Aprovação pelo Dono
+        // 3. Aprovação (Posta no Servidor Público)
         if (interaction.isButton() && interaction.customId.startsWith('aprovar_')) {
             const criadorId = interaction.customId.split('_')[1];
             const canalFinal = interaction.client.channels.cache.get(CANAL_EVENTOS_FINAL);
 
             const botaoVencedor = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`vencedor_btn_${criadorId}`).setLabel('Declarar Vencedor').setStyle(ButtonStyle.Primary)
+                new ButtonBuilder().setCustomId(`vencedor_btn_${criadorId}`).setLabel('🏆 Declarar Vencedor').setStyle(ButtonStyle.Primary)
             );
 
-            await canalFinal.send({ 
+            if (canalFinal) await canalFinal.send({ 
                 content: `🚀 **Evento Iniciado!**\nOrganizador: <@${criadorId}>`, 
                 embeds: interaction.message.embeds, 
                 components: [botaoVencedor] 
             });
-            await interaction.update({ content: '✅ Evento aprovado!', components: [] });
+            await interaction.update({ content: '✅ Evento aprovado e postado!', components: [], embeds: [] });
         }
 
-        // 4. Declarar Vencedor
+        // 4. Modal de Vencedor
         if (interaction.isButton() && interaction.customId.startsWith('vencedor_btn_')) {
             const criadorId = interaction.customId.split('_')[2];
-            if (interaction.user.id !== criadorId) return interaction.reply({ content: 'Só o criador pode finalizar!', ephemeral: true });
+            if (interaction.user.id !== criadorId) return interaction.reply({ content: 'Apenas o organizador pode finalizar!', ephemeral: true });
 
             const modalVenc = new ModalBuilder().setCustomId(`modal_venc_${criadorId}`).setTitle('Vencedor do Evento');
             modalVenc.addComponents(new ActionRowBuilder().addComponents(
-                new TextInputBuilder().setCustomId('vencedor_final').setLabel('Mencione o Vencedor').setStyle(TextInputStyle.Short)
+                new TextInputBuilder().setCustomId('vencedor_final').setLabel('Quem venceu? (@)').setStyle(TextInputStyle.Short).setRequired(true)
             ));
             await interaction.showModal(modalVenc);
         }
 
-        // 5. Postagem Final do Vencedor
+        // 5. Postagem Final + LOG NA STAFF
         if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_venc_')) {
             const criadorId = interaction.customId.split('_')[2];
             const vencedor = interaction.fields.getTextInputValue('vencedor_final');
 
-            await interaction.reply({ 
-                content: `🏆 O vencedor do evento do <@${criadorId}> é o ${vencedor}` 
-            });
-            await interaction.message.edit({ components: [] }); // Remove o botão após finalizar
+            await interaction.reply({ content: `🏆 O vencedor do evento do <@${criadorId}> é o ${vencedor}!` });
+
+            // LOG NO SERVIDOR DE STAFF
+            const guildStaff = interaction.client.guilds.cache.get(GUILD_STAFF_ID);
+            const canalLog = guildStaff?.channels.cache.get(CANAL_LOG_VENCEDORES);
+            
+            if (canalLog) {
+                const embedLog = new EmbedBuilder()
+                    .setTitle('📜 REGISTRO DE VENCEDOR')
+                    .setColor('#FFD700')
+                    .setThumbnail(interaction.guild.iconURL())
+                    .addFields(
+                        { name: '👤 Organizador', value: `<@${criadorId}>`, inline: true },
+                        { name: '🏆 Vencedor', value: `${vencedor}`, inline: true },
+                        { name: '📅 Data', value: `<t:${Math.floor(Date.now() / 1000)}:F>` }
+                    )
+                    .setTimestamp();
+
+                await canalLog.send({ embeds: [embedLog] });
+            }
+
+            try { await interaction.message.edit({ components: [] }); } catch(e) {}
         }
     }
 };
