@@ -131,7 +131,7 @@ async function checkNewResponses() {
         if (!channel) return;
 
         // NOME DA ABA CONFORME SEU PRINT: Formulário sem título (respostas)
-        const range = `Res-tuor!A${lastRowProcessed + 1}:L`;
+        const range = "A2:L"; 
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
             range: range,
