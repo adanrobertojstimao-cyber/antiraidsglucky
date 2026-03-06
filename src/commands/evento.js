@@ -1,16 +1,16 @@
-const { 
-    EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, 
-    ModalBuilder, TextInputBuilder, TextInputStyle, SlashCommandBuilder 
-} = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, SlashCommandBuilder } = require('discord.js');
 
 module.exports = {
+    name: 'evento', // ADICIONE ESTA LINHA PARA O SEU INDEX.JS LER
+    description: 'Envia o painel de criação de eventos!',
     data: new SlashCommandBuilder()
         .setName('evento')
-        .setDescription('Envia o painel de criação de eventos'),
+        .setDescription('Envia o painel de criação de eventos!'),
 
     async execute(interaction) {
-        // IDs configurados conforme sua solicitação
         const CANAL_PAINEL = '1479512064023068896';
+        // ... resto do seu código que já está no arquivo
+
 
         if (interaction.channelId !== CANAL_PAINEL) {
             return interaction.reply({ content: `Este comando só pode ser usado no canal <#${CANAL_PAINEL}>`, ephemeral: true });
