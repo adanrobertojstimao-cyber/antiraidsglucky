@@ -10,13 +10,11 @@ module.exports = {
         .setDescription('Painel de eventos SGLucky'),
 
     async execute(interaction) {
-        // IDs QUE VOCÊ PASSOU
         const CANAL_CRIAR = '1479512064023068896';
 
-        // TRAVA DE SEGURANÇA: SÓ FUNCIONA NO CANAL DE CRIAR
         if (interaction.channelId !== CANAL_CRIAR) {
             return interaction.reply({ 
-                content: `❌ Este comando só pode ser usado no canal <#${CANAL_CRIAR}>!`, 
+                content: `❌ Use este comando apenas no canal <#${CANAL_CRIAR}>!`, 
                 ephemeral: true 
             });
         }
@@ -34,24 +32,24 @@ module.exports = {
     },
 
     async handleInteraction(interaction) {
-        // IDs CONFIRMADOS
-        const GUILD_PRIVADA = '1477503335287230710';
-        const CANAL_ANALISE = '1479517012001816764';
-        const CANAL_LOGS = '1479538910139912305';
-        const CANAL_INFO = '1477642269099032738';
+        // IDs QUE VOCÊ MANDOU
+        const GUILD_PRIVADA_ID = '1477503335287230710';
+        const CANAL_ANALISE_ID = '1479517012001816764';
+        const CANAL_LOGS_ID = '1479538910139912305';
+        const CANAL_INFO_ID = '1477642269099032738';
 
         // 1. ABRIR MODAL
         if (interaction.isButton() && interaction.customId === 'abrir_modal_evento') {
             const modal = new ModalBuilder().setCustomId('modal_criacao').setTitle('Dados do Evento');
             modal.addComponents(
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('m_premio').setLabel('Qual o prêmio?').setStyle(TextInputStyle.Short).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('m_premio').setLabel('Prêmio').setStyle(TextInputStyle.Short).setRequired(true)),
                 new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('m_modos').setLabel('Modos').setStyle(TextInputStyle.Short).setRequired(true)),
                 new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('m_horario').setLabel('Horário').setStyle(TextInputStyle.Short).setRequired(true))
             );
             return await interaction.showModal(modal);
         }
 
-        // 2. ENVIO PARA ANÁLISE (STAFF)
+        // 2. ENVIO PARA ANÁLISE (VAI PARA O SERVIDOR PRIVADO)
         if (interaction.type === InteractionType.ModalSubmit && interaction.customId === 'modal_criacao') {
             const premio = interaction.fields.getTextInputValue('m_premio');
             const embed = new EmbedBuilder()
@@ -64,41 +62,47 @@ module.exports = {
                 );
 
             const botoes = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`aprovar-${interaction.user.id}-${premio}`).setLabel('Confirmar').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId(`aprovar-${interaction.user.id}-${premio.replace(/_/g, ' ')}`).setLabel('Confirmar').setStyle(ButtonStyle.Success),
                 new ButtonBuilder().setCustomId(`rejeitar-${interaction.user.id}`).setLabel('Rejeitar').setStyle(ButtonStyle.Danger)
             );
 
-            const guildStaff = await interaction.client.guilds.fetch(GUILD_PRIVADA);
-            const canalAprov = await guildStaff.channels.fetch(CANAL_ANALISE);
-            if (canalAprov) await canalAprov.send({ embeds: [embed], components: [botoes] });
-            await interaction.reply({ content: '✅ Enviado para a Staff!', ephemeral: true });
+            try {
+                const staffGuild = await interaction.client.guilds.fetch(GUILD_PRIVADA_ID);
+                const staffChannel = await staffGuild.channels.fetch(CANAL_ANALISE_ID);
+                if (staffChannel) await staffChannel.send({ embeds: [embed], components: [botoes] });
+                await interaction.reply({ content: '✅ Enviado para a Staff!', ephemeral: true });
+            } catch (e) { 
+                console.error("Erro ao enviar para análise:", e);
+                await interaction.reply({ content: '❌ Erro ao contatar servidor de Staff.', ephemeral: true }); 
+            }
         }
 
-        // 3. APROVAÇÃO (POSTA NA COMUNIDADE)
+        // 3. APROVAÇÃO (VAI PARA A COMUNIDADE)
         if (interaction.isButton() && interaction.customId.startsWith('aprovar-')) {
             const [ , criadorId, premio] = interaction.customId.split('-');
             
-            const canalInfo = interaction.client.channels.cache.get(CANAL_INFO);
-            const botaoVenc = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`vencbtn-${criadorId}-${premio}`).setLabel('🏆 Declarar Vencedor').setStyle(ButtonStyle.Primary)
-            );
+            try {
+                const infoChannel = await interaction.client.channels.fetch(CANAL_INFO_ID);
+                const botaoVenc = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`vencbtn-${criadorId}-${premio}`).setLabel('🏆 Declarar Vencedor').setStyle(ButtonStyle.Primary)
+                );
 
-            if (canalInfo) await canalInfo.send({ 
-                content: `🚀 **EVENTO CONFIRMADO!**\nOrganizador: <@${criadorId}>\nPrêmio: **${premio}**`, 
-                components: [botaoVenc] 
-            });
-            await interaction.update({ content: '✅ Postado na Comunidade!', components: [], embeds: [] });
+                if (infoChannel) await infoChannel.send({ 
+                    content: `🚀 **EVENTO CONFIRMADO!**\nOrganizador: <@${criadorId}>\nPrêmio: **${premio}**`, 
+                    components: [botaoVenc] 
+                });
+                await interaction.update({ content: '✅ Postado na Comunidade!', components: [], embeds: [] });
+            } catch (e) { console.error("Erro ao postar na Comunidade:", e); }
         }
 
         // 4. MODAL VENCEDOR
         if (interaction.isButton() && interaction.customId.startsWith('vencbtn-')) {
             const [ , criadorId, premio] = interaction.customId.split('-');
-
             if (interaction.user.id !== criadorId) return interaction.reply({ content: 'Só o criador finaliza!', ephemeral: true });
 
             const modalVenc = new ModalBuilder().setCustomId(`finalvenc-${criadorId}-${premio}`).setTitle('Declarar Vencedor');
             modalVenc.addComponents(new ActionRowBuilder().addComponents(
-                new TextInputBuilder().setCustomId('venc_tag').setLabel('Mencione o Vencedor (@)').setStyle(TextInputStyle.Short).setRequired(true)
+                new TextInputBuilder().setCustomId('venc_tag').setLabel('Quem venceu? (@)').setStyle(TextInputStyle.Short).setRequired(true)
             ));
             await interaction.showModal(modalVenc);
         }
@@ -107,15 +111,15 @@ module.exports = {
         if (interaction.type === InteractionType.ModalSubmit && interaction.customId.startsWith('finalvenc-')) {
             const [ , criadorId, premio] = interaction.customId.split('-');
             const vencedor = interaction.fields.getTextInputValue('venc_tag');
+            const dataF = new Date().toLocaleString('pt-BR').replace(',', '-');
 
-            const agora = new Date();
-            const dataF = `${agora.toLocaleDateString('pt-BR')}-${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
-
+            // Resposta Pública
             await interaction.reply({ content: `🏆 O vencedor do evento do <@${criadorId}> valendo **${premio}** é o ${vencedor}!` });
 
+            // LOG NO PRIVADO (FORÇADO)
             try {
-                const targetGuild = await interaction.client.guilds.fetch(GUILD_PRIVADA);
-                const targetChannel = await targetGuild.channels.fetch(CANAL_LOGS);
+                const logGuild = await interaction.client.guilds.fetch(GUILD_PRIVADA_ID);
+                const logChannel = await logGuild.channels.fetch(CANAL_LOGS_ID);
                 
                 const embedLog = new EmbedBuilder()
                     .setTitle('🏆 REGISTRO DE VENCEDOR')
@@ -128,8 +132,10 @@ module.exports = {
                     )
                     .setTimestamp();
 
-                if (targetChannel) await targetChannel.send({ embeds: [embedLog] });
-            } catch (e) { console.error("ERRO NO LOG:", e); }
+                if (logChannel) await logChannel.send({ embeds: [embedLog] });
+            } catch (e) { 
+                console.error("ERRO CRÍTICO NO LOG:", e); 
+            }
 
             try { await interaction.message.edit({ components: [] }); } catch(e) {}
         }
