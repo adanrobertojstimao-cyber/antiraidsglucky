@@ -17,6 +17,11 @@ const fs = require('fs');
 const path = require('path');
 const { checkSpam, checkChannels } = require('./antiRaid');
 const { gerenciarEventos } = require('./evento-system');
+const express = require('express');
+const app = express();
+app.get('/', (req, res) => res.send('Bot Online!'));
+app.listen(process.env.PORT || 3000);
+
 
 // 1. INICIALIZAÇÃO DO CLIENTE COM TODAS AS INTENTS
 const client = new Client({ 
